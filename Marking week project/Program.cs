@@ -1,9 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Policy;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Marking_week_project
 {
@@ -11,10 +13,15 @@ namespace Marking_week_project
     {
         static void Main(string[] args)
         {
-            //test test 
-            ValidateUser();
-            MenuLoop();
+            if (ValidateUser())
+            {
+                MenuLoop();
+            }
+
         }
+
+        //subroutines 
+
         static void MenuLoop()
         {
 
@@ -50,6 +57,9 @@ namespace Marking_week_project
                     case "6":
                         MenuAddNewUser();
                         break;
+                    case "7":
+                        SaveAndExit(MyHotel);
+                        break;
                     case "0":
                         DisplayMenu = false;
                         break;
@@ -60,23 +70,53 @@ namespace Marking_week_project
             }
 
         }
-        static string HashFrom(string str)
+
+        static void SaveAndExit(hotel MyHotel)
         {
-            string hashed = "";
-            foreach (char c in str)
+            Console.WriteLine("Saving hotel data");
+            string FileName = "hotel_data.txt";
+            string binFolderPath = AppDomain.CurrentDomain.BaseDirectory;
+
+            if (!File.Exists(FileName))
             {
-                hashed = ((int.Parse(str) - 101) / 67).ToString(); 
+                File.Create(FileName);
             }
-            return hashed;
+
+            using (StreamWriter SW = new StreamWriter(FileName, true))
+            {
+                foreach (Guest guest in MyHotel.GetGuestList())
+                {
+                    //string GuestRoomNum = guest.AssignedRoomNumber.ToString();
+                    //foreach (Room room in MyHotel.GetRooms())
+
+                    //    if (room.RoomNumber.ToString() == GuestRoomNum)
+                    //    {
+                    //}
+                    SW.Write($"{guest.Name},{guest.GuestID}, {guest.AssignedRoomNumber}, {guest.CheckInDate}, false"); 
+                }
+
+                foreach (Room room in MyHotel.GetAvailableRooms())
+                {
+                    SW.Write($"0 ,0, {room.RoomNumber}, 0, true");
+                }
+            }
         }
 
-        static string HashTo(string str)
+        static string Hash(string str)
         {
             string hashed = "";
-            foreach (char c in str)
+            using (SHA256 SHA256 = SHA256.Create()) //SHA256 hashing algorithm 
             {
-                hashed = ((int)c * 67 + 101).ToString();
+                byte[] bytes = SHA256.ComputeHash(Encoding.UTF8.GetBytes(str)); //Convert to bytes
+                StringBuilder builder = new StringBuilder();
+
+                foreach (byte b in bytes)
+                {
+                    builder.Append(b.ToString("x2")); //Convert each byte to hex
+                }
+                hashed = builder.ToString();
             }
+
             return hashed;
         }
 
@@ -90,7 +130,7 @@ namespace Marking_week_project
             using (StreamWriter SW = new StreamWriter(FileName))
             {
                 SW.WriteLine();
-                SW.Write(HashTo(newUser.GetName()) + "," + HashTo(newUser.GetPassword()));
+                SW.Write(Hash(newUser.GetName()) + "," + Hash(newUser.GetPassword()));
             }
         }
 
@@ -156,14 +196,15 @@ namespace Marking_week_project
             MyHotel.CheckIn(NewGuest, selectedRoomType);
         }
 
-        static void ValidateUser()
+        static bool ValidateUser()
         {
             List<user> UserList = GetUsers();
             user CurrentUser = new user();
+            int attempts = 0;
             bool validUser = false;
             string userName, password;
 
-            while (!validUser)
+            while (attempts < 2 && validUser == false)
             {
                 userName = StrValidate("Enter your username: ");
                 CurrentUser.SetName(userName);
@@ -173,18 +214,24 @@ namespace Marking_week_project
 
                 for (int i = 0; i < UserList.Count; i++)
                 {
-                    if (CurrentUser.GetName() == HashFrom(UserList[i].GetName()) && CurrentUser.GetPassword() == HashFrom(UserList[i].GetPassword()) || CurrentUser.GetName() == "0")
+                    if (Hash(CurrentUser.GetName()) == UserList[i].GetName() && Hash(CurrentUser.GetPassword()) == UserList[i].GetPassword() || CurrentUser.GetName() == "0")
                     {
                         validUser = true;
                         Console.WriteLine();
-                        return;
+                    }
+                    else if(attempts == 2)
+                    {
+                        Console.WriteLine("Too many attempts exiting.");
                     }
                     else
                     {
+                        validUser = false;
                         Console.WriteLine("Invalid user, try again");
+                        attempts++;
                     }
                 }
             }
+            return validUser;
         }
 
         static List<user> GetUsers()
@@ -309,6 +356,8 @@ namespace Marking_week_project
             return SearchGuest;
         }
 
+        //classes
+
         class hotel
         {
             private string Name;
@@ -317,6 +366,18 @@ namespace Marking_week_project
 
             public hotel(string name)
             {
+                string FileName = "hotel_data.txt";
+
+                if (File.Exists(FileName))
+                {
+                    using (StreamReader SR = new StreamReader(FileName))
+                    {
+                        foreach (string line in SR.ReadToEnd().Trim(','))
+                        {
+
+                        }
+                    }
+                }
                 Name = name;
                 Rooms = new List<Room>();
                 CurrentGuests = new List<Guest>();
@@ -398,6 +459,15 @@ namespace Marking_week_project
                 }
                 return AvailableRooms;
             }
+            public List<Room> GetRooms()
+            {
+                List<Room> AvailableRooms = new List<Room>();
+                foreach (Room room in Rooms)
+                {
+                    AvailableRooms.Add(room);
+                }
+                return AvailableRooms;
+            }
 
             public double CalculateBill(Guest Guest)
             {
@@ -464,6 +534,7 @@ namespace Marking_week_project
                 }
             }
         }
+
 
         class Room
         {
